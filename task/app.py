@@ -26,7 +26,20 @@ async def start(stream: bool) -> None:
     # 8. Add generated message to history
     # 9. Test it with DialClient and CustomDialClient
     # 10. In CustomDialClient add print of whole request and response to see what you send and what you get in response
-    raise NotImplementedError
+    client = DialClient(deployment_name="gpt-4o")
+    conversation = Conversation()
+    conversation.add_message(Message(role=Role.SYSTEM, content=DEFAULT_SYSTEM_PROMPT))
+    while True:
+        user_input = input("You: ")
+        if user_input.lower() == "exit":
+            break
+        conversation.add_message(Message(role=Role.USER, content=user_input))
+        if stream:
+            response = client.get_completion(conversation.get_messages())
+        else:
+            response = await client.stream_completion(conversation.get_messages())
+        conversation.add_message(response)
+        print(f"Assistant: {response}")
 
 
 asyncio.run(

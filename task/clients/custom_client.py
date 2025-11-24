@@ -40,7 +40,25 @@ class DialClient:
         #   - If no choices: raise ValueError("No Choice has been present in the response")
         # 5. If status code != 200:
         #   - Raise Exception with format: f"HTTP {response.status_code}: {response.text}"
-        raise NotImplementedError
+        headers = {
+            "api-key": self._api_key,
+            "Content-Type": "application/json"
+        }
+        request_data = {
+            "messages": [msg.to_dict() for msg in messages]
+        }
+        response = requests.post(self._endpoint, headers=headers, json=request_data)
+        if response.status_code == 200:
+            response_data = response.json()
+            choices = response_data.get("choices", [])
+            if choices:
+                content = choices[0]["message"]["content"]
+                print(content)
+                return Message(role=Role.AI, content=content)
+            else:
+                raise ValueError("No Choice has been present in the response")
+        else:
+            raise Exception(f"HTTP {response.status_code}: {response.text}")
 
     async def stream_completion(self, messages: list[Message]) -> Message:
         """
@@ -75,7 +93,32 @@ class DialClient:
         #      * Get error text: error_text = await response.text()
         #      * Print error: print(f"{response.status} {error_text}")
         # 7. Return Message(role=Role.AI, content=''.join(contents))
-        raise NotImplementedError
+        headers = {
+            "api-key": self._api_key,
+            "Content-Type": "application/json"
+        }
+        request_data = {
+            "stream": True,
+            "messages": [msg.to_dict() for msg in messages]
+        }
+        contents = []
+        async with aiohttp.ClientSession() as session:
+            async with session.post(self._endpoint, json=request_data, headers=headers) as response:
+                if response.status == 200:
+                    async for line in response.content:
+                        line_str = line.decode('utf-8').strip()
+                        if line_str.startswith("data: "):
+                            data = line_str[6:].strip()
+                            if data != "[DONE]":
+                                content_snippet = self._get_content_snippet(data)
+                                print(content_snippet, end='')
+                                contents.append(content_snippet)
+                            else:
+                                print()
+                else:
+                    error_text = await response.text()
+                    print(f"{response.status} {error_text}")
+        return Message(role=Role.AI, content=''.join(contents))
 
     def _get_content_snippet(self, data: str) -> str:
         """
@@ -88,4 +131,9 @@ class DialClient:
         #    - Get delta from choices[0]["delta"]
         #    - Return content from delta.get("content", '') - use empty string as default
         # 4. If no choices, return empty string
-        raise NotImplementedError
+        data_json = json.loads(data)
+        choices = data_json.get("choices", [])
+        if choices:
+            delta = choices[0]["delta"]
+            return delta.get("content", '')
+        return ''
